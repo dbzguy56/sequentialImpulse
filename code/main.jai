@@ -18,6 +18,8 @@ square_vbo : u32;
 square_ebo : u32;
 cube_vao : u32;
 cube_vbo : u32;
+line_vao : u32;
+line_vbo : u32;
 tetrahedron_vao : u32;
 tetrahedron_vbo : u32;
 tetrahedron_ebo : u32;
@@ -196,6 +198,9 @@ main :: () {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * size_of(float), null);
     glEnableVertexAttribArray(0);
 
+    glGenVertexArrays(1, *line_vao);
+    glGenBuffers(1, *line_vbo);
+
     glGenVertexArrays(1, *simplex_vao);
     glGenBuffers(1, *simplex_ebo);
     glGenBuffers(1, *simplex_vbo);
@@ -222,7 +227,7 @@ main :: () {
 
     //tetrahedron_pos := Vector3.{-7.0, 0.0, 0.0};
     //cube_pos := Vector3.{0.0, 0.0, 0.0};
-    triangle_pos := Vector3.{-7.0, 0.0, 0.0};
+    triangle_pos := Vector3.{-2.0, 0.0, 0.0};
     square_pos := Vector3.{0.0, 0.0, 0.0};
     //square_pos := Vector3.{-3.0, 2.0, 0.0};
     camera_pos := xyz(0.0, 0.0, 10.0);
@@ -236,10 +241,10 @@ main :: () {
     fov := 45.0;
     sensitivity := 0.1;
     scale_factor := 1.0;
-    // default just the negative to trigger collision check
-    last_tetrahedron_world_pos := to_world_pos(tetrahedron_vertices, -triangle_pos);
-    last_cube_world_pos := to_world_pos(cube_vertices, -square_pos);
-
+    collision : bool;
+    collision_normal : Vector3;
+    face_normals : [..] Face_Normal;
+    polytope : [..] Vector3;
 
     running := true;
     while running {
@@ -284,44 +289,16 @@ main :: () {
         tetrahedron_world_pos := to_world_pos(tetrahedron_vertices, triangle_pos);
         cube_world_pos := to_world_pos(cube_vertices, square_pos);
         simplex_points : [..] Vector3;
-        collision : bool;
         collision = gjk(tetrahedron_world_pos, cube_world_pos, *simplex_points);
         if collision {
-            //collision_normal = epa(simplex_points, tetrahedron_world_pos, cube_world_pos).normal;
+            array_reset(*polytope);
+            polytope, face_normals = epa(simplex_points, tetrahedron_world_pos, cube_world_pos);
             print("\nThere is a collision!");
         }
         else {
             print("\nNO COLLISION!");
         }
-        collision_normal : Vector3;
-/*
-        if not_equal_pos(last_tetrahedron_world_pos, tetrahedron_world_pos)
-            || not_equal_pos(last_cube_world_pos, cube_world_pos) {
 
-            collision = gjk(tetrahedron_world_pos, cube_world_pos, *simplex_points);
-            if collision {
-                //collision_normal = epa(simplex_points, tetrahedron_world_pos, cube_world_pos).normal;
-                print("\nThere is a collision!");
-            }
-            else {
-                print("\nNO COLLISION!");
-            }
-        }
-        last_tetrahedron_world_pos = tetrahedron_world_pos;
-        last_cube_world_pos = cube_world_pos;
-        */
-/*
-        triangle_world_pos := to_world_pos(triangle_vertices, triangle_pos);
-        square_world_pos := to_world_pos(square_vertices, square_pos);
-        //print("\ntriangle_world_pos: %, square_world_pos: %", triangle_world_pos, square_world_pos);
-        collision := gjk(triangle_world_pos, square_world_pos);
-        if collision {
-            print("\nThere is a collision!");
-        }
-        else {
-            print("\nNO COLLISION!");
-        }
-*/
         camera_speed := 5 * delta_time;
 
         if input_button_states[#char "W"] & .DOWN {
@@ -356,7 +333,8 @@ main :: () {
         camera_front = normalize_or_z_axis(xyz(direction_x, direction_y, direction_z));
 
         glEnable(GL_DEPTH_TEST);
-        glClearColor(to_rgb(254), to_rgb(251), to_rgb(200), 1.0);
+        //glClearColor(to_rgb(254), to_rgb(251), to_rgb(200), 1.0);
+        glClearColor(to_rgb(71), to_rgb(78), to_rgb(104), 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shaderProgram);
@@ -379,6 +357,8 @@ main :: () {
         color_loc := glGetUniformLocation(shaderProgram, "shapeColor");
         glUniform3f(color_loc, 1.0, 0.0, 0.0);
 
+        // wireframe
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
         // tetrahedron
         glBindVertexArray(tetrahedron_vao);
@@ -388,8 +368,6 @@ main :: () {
         glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
         glDrawArrays(GL_TRIANGLES, 0, 12);
 
-        // wireframe
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
         // cube
         glBindVertexArray(cube_vao);
@@ -402,7 +380,6 @@ main :: () {
 
         if collision {
             simplex_vertices := to_vertices(simplex_points);
-            //print("\n\t simplex vertices: %", simplex_vertices);
 
             // simplex tetrahedron
             glBindVertexArray(simplex_vao);
@@ -420,6 +397,59 @@ main :: () {
             glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
             glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, null);
             //glDrawArrays(GL_TRIANGLES, 0, 12);
+/*
+            // penetration line
+            line_points : [..] Vector3;
+            array_add(*line_points, .{0, 0, 0}, collision_normal);
+            line_vertices : [] float32 = to_vertices(line_points);
+            glBindVertexArray(line_vao);
+            glBindBuffer(GL_ARRAY_BUFFER, line_vbo);
+            glBufferData(GL_ARRAY_BUFFER, line_vertices.count * size_of(float32), line_vertices.data, GL_STATIC_DRAW);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * size_of(float), null);
+            glEnableVertexAttribArray(0);
+
+            glUniform3f(color_loc, 0.0, 1.0, 1.0);
+            m_trans = make_translation_matrix4(.{0.0, 0.0, 0.0});
+            m_result = m_trans;
+            glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+*/
+
+            // face normals
+            face_normals_with_polytope : [..] Vector3;
+            for n, i : face_normals {
+                face := i * 3;
+                array_add(*face_normals_with_polytope,
+                          n.position);
+                array_add(*face_normals_with_polytope, n.normal);
+            }
+            face_normals_vertices := to_vertices(face_normals_with_polytope);
+            glBindVertexArray(line_vao);
+            glBindBuffer(GL_ARRAY_BUFFER, line_vbo);
+            glBufferData(GL_ARRAY_BUFFER, face_normals_vertices.count * size_of(float32), face_normals_vertices.data, GL_STATIC_DRAW);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * size_of(float), null);
+            glEnableVertexAttribArray(0);
+
+            glUniform3f(color_loc, to_rgb(248), to_rgb(222), to_rgb(34));
+            m_trans = make_translation_matrix4(.{0.0, 0.0, 0.0});
+            m_result = m_trans;
+            glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
+            glDrawArrays(GL_LINES, 0, 8);
+
+            // polytope
+            polytope_vertices := to_vertices(polytope);
+            glBindVertexArray(simplex_vao);
+            glBindBuffer(GL_ARRAY_BUFFER, simplex_vbo);
+            glBufferData(GL_ARRAY_BUFFER, polytope_vertices.count * size_of(float32), polytope_vertices.data, GL_STATIC_DRAW);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * size_of(float), null);
+            glEnableVertexAttribArray(0);
+
+            glUniform3f(color_loc, to_rgb(171), to_rgb(32), to_rgb(253));
+            m_trans = make_translation_matrix4(.{0.0, 0.0, 0.0});
+            m_scaled = make_scale_matrix4(xyz(scale_factor, scale_factor, scale_factor));
+            m_result = m_trans * m_scaled;
+            glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
+            glDrawArrays(GL_TRIANGLES, 0, xx polytope_vertices.count);
         }
 
         // wireframe off
@@ -470,174 +500,220 @@ main :: () {
     }
 }
 
-/*
-Collision_Points :: struct {
+Contact :: struct {
+// 1 for each collider
+    points_world : [2] Vector3;
+    points_local : [2] Vector3;
     normal : Vector3;
-    depth : float32;
-    has_collision : bool;
+    tangents : [2] Vector3;
+    penetration_depth : float32;
 }
 
-Edge_Pair :: struct {
-    a : u32;
-    b : u32;
+compute_tangents :: (normal : Vector3) -> [2] Vector3 {
+    abs_x := abs(normal.x);
+    abs_y := abs(normal.y);
+    abs_z := abs(normal.z);
+    axis : Vector3;
+
+    if abs_x > abs_y {
+        if abs_x > abs_z {
+            axis.x = 1.0; // X > Y > Z, X > Z > Y
+        }
+        else {
+            axis.z = 1.0; // Z > X > Y
+        }
+    }
+    else {
+        if abs_y > abs_z {
+            axis.y = 1.0; // Y > X > Z, Y > Z > X
+        }
+        else {
+            axis.z = 1.0; // Z > Y > X
+        }
+    }
+
+    arr : [2] Vector3;
+    //arr[0] = normalize_or_z_axis(cross_product(normal, axis));
+    //arr[1] = normalize_or_z_axis(cross_product(normal, arr[0]));
+
+    if normal.x >= 0.57735 {
+        arr[0] = .{normal.y, -normal.x, 0.0};
+    }
+    else {
+        arr[0] = .{0.0, normal.z, -normal.y};
+    }
+    arr[0] = normalize_or_z_axis(arr[0]);
+    arr[1] = cross_product(normal, arr[0]);
+    return arr;
 }
 
-Face_Normal :: struct {
-    normal : Vector3;
-    distance : float32;
-}
-
-get_face_normals :: (polytope : [] Vector3, faces : [] u32) -> [..] Face_Normal, s64 {
-    face_normals : [..] Face_Normal;
-    min_triangle : s64;
-    min_distance := FLOAT32_MAX;
+to_edges :: (arr : [] Vector3) -> [..] Edge {
+    edge_pairs : [..] Edge;
 
     i := 0;
-    while i < faces.count {
-        //print("\nloop line 472");
-        a := polytope[faces[i]];
-        b := polytope[faces[i + 1]];
-        c := polytope[faces[i + 2]];
+    while i < arr.count {
+        array_add(*edge_pairs
+                  , Edge.{arr[i]    , arr[i + 1]}
+                  , Edge.{arr[i + 1], arr[i + 2 ]}
+                  , Edge.{arr[i + 2], arr[i]}
+                 );
+        i += 3;
+    }
 
-        normal : Vector3 = normalize_or_z_axis(cross_product(b - a, c - a));
+    return edge_pairs;
+}
+
+
+find_centroid :: (a : Vector3, b : Vector3, c : Vector3) -> Vector3 {
+    return Vector3.{ (a.x + b.x + c.x) / 3
+                     , (a.y + b.y + c.y) / 3
+                     , (a.z + b.z + c.z) / 3
+                   };
+}
+
+get_face_normals_and_min_face :: (faces : [..] Face, polytope : [] Vector3) -> [..] Face_Normal, s64 {
+    min_face := 0;
+    min_distance := FLOAT32_MAX;
+    face_normals : [..] Face_Normal;
+
+    for f, i : faces {
+        a := f.a;
+        b := f.b;
+        c := f.c;
+
+        normal := normalize_or_z_axis(cross_product(b - a, c - a));
+
+        centroid := find_centroid(a, b, c);
+
         distance := dot_product(normal, a);
-
         if distance < 0 {
             normal *= -1;
             distance *= -1;
         }
 
-        array_add(*face_normals, Face_Normal.{normal, distance});
+        // We need to add the centroid because the normal is originally
+        // displayed at origin, rather than off the face (because points
+        // "a, b, c" are all just points from origin to A, etc)
+        normal = centroid + normal;
+        array_add(*face_normals, .{normal, distance, centroid});
 
         if distance < min_distance {
-            min_triangle = i / 3;
+            min_face = i;
             min_distance = distance;
         }
+    }
 
+    return face_normals, min_face;
+}
+
+epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3) -> [..] Vector3, [..] Face_Normal {
+    //initial_polytope := array_copy(polytope);
+    //faces_vertices := array_copy(tetrahedron_indices);
+    // Initially we find the closest face to the origin.
+    // If the face of point 'v' on the polytope "sees" the support point,
+    // we need to remove that edge so that we can add the new support point
+    // to the polytope. (A face with normal n and vertex v "sees" support point 's'
+    // if (s - v) `dot_product` n > 0 )
+    //
+    // An edge that is shared between two faces that "see" the support point is removed.
+    // Then for all faces that "see" the support point, have their remaining edges added
+    // along with the new support to make the new faces. Finally the new faces are added
+    // to the polytope.
+
+    // keep_looping := true;
+    // To loop through any new polytopes until a point of the polytope is also a point
+    // on the minkowski difference (support point and v have the same distance).
+    faces : [..] Face;
+    i := 0;
+    while i < tetrahedron_indices.count {
+        array_add(*faces, Face.{ polytope[tetrahedron_indices[i]]
+                 , polytope[tetrahedron_indices[i + 1]]
+                 , polytope[tetrahedron_indices[i + 2]]
+                 });
         i += 3;
     }
 
-    return (face_normals, min_triangle);
-}
+    normals, min_face := get_face_normals_and_min_face(faces, polytope);
+    min_normal := normals[min_face].normal;
+    support_point := get_support(verticesA, verticesB, min_normal);
+    faces_to_remove : [..] s64;
+    edges : [..] Edge;
 
-add_if_unique_edge :: (edges : *[..] Edge_Pair, faces : [] u32, a : s64, b : s64) {
-    forward := array_find_edge_pair(<<edges, Edge_Pair.{faces[a], faces[b]});
-    reverse := array_find_edge_pair(<<edges, Edge_Pair.{faces[b], faces[a]});
-    //print("\nreverse: %, edge_pair: %, \n\tedges: %", reverse, Edge_Pair.{faces[b], faces[a]}, (<<edges));
+    for f, i : faces {
+        v := find_centroid(f.a, f.b, f.c);
+        n := normals[i].normal;
 
-    // if reverse exists
-    if reverse != -1 && (<<edges).count > 0 {
-        array_unordered_remove_by_index(edges, reverse);
-    }
-    else if forward != -1 && (<<edges).count > 0 {
-        array_unordered_remove_by_index(edges, forward);
-    }
-    else {
-        //print("\nAdding edge: %,  to list: \n\t%", Edge_Pair.{faces[a], faces[b]}, <<edges);
-        array_add(edges, .{faces[a], faces[b]});
-    }
-}
+        if dot_product((support_point - v), n) > 0 {
+            array_add(*faces_to_remove, i);
 
-epa :: (simplex_points : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3) -> Collision_Points {
-    polytope := simplex_points;
-    faces : [..] u32;
-    array_copy(*faces, tetrahedron_indices);
+            points_for_edges : [..] Vector3;
+            array_add(*points_for_edges, f.a, f.b, f.c);
+            edges_in_face := to_edges(points_for_edges);
 
-    face_normals, min_face := get_face_normals(polytope, faces);
-
-    min_normal : Vector3;
-    min_distance := FLOAT32_MAX;
-
-    while min_distance == FLOAT32_MAX {
-        //print("\nloop line 524");
-        min_normal = face_normals[min_face].normal;
-        min_distance = face_normals[min_face].distance;
-
-        support_vector := get_support(verticesA, verticesB, min_normal);
-        s_distance := dot_product(min_normal, support_vector);
-
-        if abs(s_distance - min_distance) > 0.001 {
-            min_distance = FLOAT32_MAX;
-            unique_edges : [..] Edge_Pair;
-            //print("\nface_normals.count = %", face_normals.count);
-            // add only unique edges, since two faces can result in same support point being added
-            i := 0;
-            while i < face_normals.count {
-                //print("\nloop line 538");
-                if same_direction(face_normals[i].normal, support_vector) {
-                    f := i * 3;
-
-                    add_if_unique_edge(*unique_edges, faces, f, f + 1);
-                    add_if_unique_edge(*unique_edges, faces, f + 1, f + 2);
-                    add_if_unique_edge(*unique_edges, faces, f + 2, f);
-
-                    faces[f + 2] = peek(faces);
-                    pop(*faces);
-                    faces[f + 1] = peek(faces);
-                    pop(*faces);
-                    faces[f] = peek(faces);
-                    pop(*faces);
-
-                    face_normals[i] = peek(face_normals);
-                    pop(*face_normals);
-
-                    i -= 1;
-                }
-                i += 1;
-            }
-
-            new_faces : [..] u32;
-            for edge : unique_edges {
-                print("\nedge = %, polytope.count = %", edge, polytope.count);
-                //print("\nedge = %, polytope.count = %, polytope := %", edge, polytope.count, polytope);
-                array_add(*new_faces, edge.a);
-                array_add(*new_faces, edge.b);
-                array_add(*new_faces, xx polytope.count);
-            }
-
-            array_add(*polytope, support_vector);
-            new_normals, new_min_face := get_face_normals(polytope, new_faces);
-
-            old_min_distance := FLOAT32_MAX;
-            i = 0;
-            while i < face_normals.count {
-                //print("\nloop line 571");
-                if face_normals[i].distance < old_min_distance {
-                    old_min_distance = face_normals[i].distance;
-                    min_face = i;
-                }
-                i += 1;
-            }
-
-            if new_normals[new_min_face].distance < old_min_distance {
-                min_face = new_min_face + face_normals.count;
-            }
-
-            for f : new_faces {
-                //print("\nloop line 584");
-                print("\nAdding face: %,  to list: \n\t%", f, faces);
-                array_add(*faces, f);
-            }
-            for n : new_normals {
-                //print("\nloop line 588");
-                array_add(*face_normals, n);
+            for edge : edges_in_face {
+                add_if_unique_edge(*edges, edge);
             }
         }
     }
 
-    return Collision_Points.{ normal = min_normal, depth = min_distance + 0.001, has_collision = true };
-}
-
-array_find_edge_pair :: (arr : [] Edge_Pair, edge : Edge_Pair) -> s64 {
-    // based off of `array_find` in Array.jai`
-    for x, i : arr {
-        //print("\nloop line 1241, arr count: %", arr.count);
-        if x.a == edge.a && x.b == edge.b then return i;
+    // Remove old faces before adding edges/points for new face (using new support point).
+    f := faces_to_remove.count - 1;
+    while f >= 0 {
+        array_unordered_remove_by_index(*faces, faces_to_remove[f]);
+        f -= 1;
     }
-    return -1; // Not found
+
+    for edge : edges {
+        array_add(*faces, Face.{edge.a, edge.b, support_point});
+    }
+
+    new_polytope : [..] Vector3;
+    for f : faces {
+        array_add(*new_polytope, f.a, f.b, f.c);
+    }
+
+    return new_polytope, normals;
 }
 
-*/
+Face :: struct {
+    a : Vector3;
+    b : Vector3;
+    c : Vector3;
+}
+
+Edge :: struct {
+    a : Vector3;
+    b : Vector3;
+}
+
+Face_Normal :: struct {
+    normal : Vector3;
+    distance : float32;
+    position : Vector3;
+}
+
+add_if_unique_edge :: (edges : *[..] Edge, edge : Edge) {
+    forward_found, forward_index := array_find_edge_pair(<<edges, Edge.{edge.a, edge.b});
+    reverse_found, reverse_index := array_find_edge_pair(<<edges, Edge.{edge.b, edge.a});
+    if reverse_found {
+        array_unordered_remove_by_index(edges, reverse_index);
+    }
+    else if forward_found {
+        array_unordered_remove_by_index(edges, forward_index);
+    }
+    else {
+        array_add(edges, .{edge.a, edge.b});
+    }
+}
+
+array_find_edge_pair :: (arr : [] Edge, edge : Edge) -> bool, s64 {
+    // based off of `array_find` in Array.jai`
+    for x : arr {
+        if x.a == edge.a && x.b == edge.b then return true, it_index;
+    }
+    return false, -1; // Not found
+}
+
 support :: (vertices : [] Vector3, direction : Vector3) -> Vector3 {
     furthest_distance := -FLOAT32_MAX;
     furthest_vertex : Vector3;
@@ -660,7 +736,6 @@ get_support :: (verticesA : [] Vector3, verticesB : [] Vector3, direction : Vect
 
 add_support :: (simplex_points : *[..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3, direction : Vector3) -> bool {
     new_point := get_support(verticesA, verticesB, direction);
-    //print("\n-----Adding point: %, to simplex: %, \n-----verticesA: %, \n-----verticesB: %, \n-----direction: %", new_point, <<simplex_points, verticesA, verticesB, direction);
     array_add(simplex_points, new_point);
     return dot_product(direction, new_point) >= 0;
 }
@@ -672,7 +747,6 @@ Evolve_Result :: enum u32 {
 }
 
 gjk :: (verticesA : [] Vector3, verticesB : [] Vector3, simplex_points : *[..] Vector3) -> bool {
-    //simplex_points : [..] Vector3;
     evolve_result : Evolve_Result = .STILL_EVOLVING;
     direction := Vector3.{0, 0, 0};
     while evolve_result == .STILL_EVOLVING {
@@ -686,15 +760,12 @@ gjk :: (verticesA : [] Vector3, verticesB : [] Vector3, simplex_points : *[..] V
 evolve_simplex :: (simplex_points : *[..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3, direction : *Vector3) -> Evolve_Result {
     if simplex_points.count == {
         case 0;
-            //print("\n>>>690direction: %, simplex = %", <<direction, <<simplex_points);
             direction = *(average_point(verticesB) - average_point(verticesA));
-            //print("\n>>>692direction: %, simplex = %", <<direction, <<simplex_points);
+
         case 1;
-            //print("\n>>>694direction: %, simplex = %", <<direction, <<simplex_points);
             // flip the direction
             direction = *(-1 * (average_point(verticesB) - average_point(verticesA)));
-            //direction = *(-1 * <<direction);
-            //print("\n>>>695direction: %, simplex = %", <<direction, <<simplex_points);
+
         case 2;
             // line ab is the line formed by the first 2 vertices
             ab := simplex_points.data[1] - simplex_points.data[0];
@@ -703,7 +774,7 @@ evolve_simplex :: (simplex_points : *[..] Vector3, verticesA : [] Vector3, verti
 
             temp := cross_product(ab, a0);
             direction = *cross_product(temp, ab);
-            //print("\n>>>704direction: %, simplex = %", <<direction, <<simplex_points);
+
         case 3;
             ac := simplex_points.data[2] - simplex_points.data[0];
             ab := simplex_points.data[1] - simplex_points.data[0];
@@ -712,9 +783,8 @@ evolve_simplex :: (simplex_points : *[..] Vector3, verticesA : [] Vector3, verti
             // ensure that it points toward the origin
             a0 := -simplex_points.data[0];
             if (dot_product(direction, a0) < 0) then direction = *(-1 * <<direction);
-            //print("\n>>>713 direction: %, simplex = %", <<direction, <<simplex_points);
+
         case 4;
-            //print("\n>>>715direction: %", <<direction);
             // calculate the 3 edges of interest
             da := simplex_points.data[3] - simplex_points.data[0];
             db := simplex_points.data[3] - simplex_points.data[1];
@@ -751,10 +821,9 @@ evolve_simplex :: (simplex_points : *[..] Vector3, verticesA : [] Vector3, verti
         case;
             print("Can't have a simplex with % vertices!", simplex_points.count);
     }
-    //print("\n>>>754 simplex = %", <<simplex_points);
     evolve_result := ifx add_support(simplex_points, verticesA, verticesB, direction)
         then Evolve_Result.STILL_EVOLVING else Evolve_Result.NO_INTERSECTION;
-    //print("\n>>>757direction = %, simplex = %", <<direction, <<simplex_points);
+
     return evolve_result;
 }
 
@@ -769,7 +838,6 @@ average_point :: (vertices : [] Vector3) -> Vector3 {
     avg.y /= vertices.count;
     avg.z /= vertices.count;
 
-    //print("\n+++++++ verts: %\tavg: %", vertices, avg);
     return avg;
 }
 
@@ -780,486 +848,14 @@ to_world_pos :: (vertices : [] float32, pos : Vector3) -> [..] Vector3 {
         while i != vertices.count {
             array_add(*vertices_vec3
                       , .{ vertices.data[i] + pos.x
-                           , vertices.data[i+1] + pos.y
-                           , vertices.data[i+2] + pos.z });
+                      , vertices.data[i+1] + pos.y
+                      , vertices.data[i+2] + pos.z });
             i += 3;
         }
     }
 
     return vertices_vec3;
 }
-
-/* for 2d collisions
-support :: (vertices : [] Vector2, direction : Vector2) -> Vector2 {
-    furthest_distance := -FLOAT32_MAX;
-    furthest_vertex : Vector2;
-
-    for v : vertices {
-        distance := dot_product(v, direction);
-        if distance > furthest_distance {
-            furthest_distance = distance;
-            furthest_vertex = v;
-        }
-    }
-
-    return furthest_vertex;
-}
-
-get_support :: (verticesA : [] Vector2, verticesB : [] Vector2, direction : Vector2) -> Vector2 {
-    return support(verticesA, direction)
-        - support(verticesB, -direction);
-}
-
-add_support :: (simplex_points : *[..] Vector2, verticesA : [] Vector2, verticesB : [] Vector2, direction : Vector2) -> bool {
-    new_point := get_support(verticesA, verticesB, direction);
-    array_add(simplex_points, new_point);
-    return dot_product(direction, new_point) >= 0;
-}
-
-gjk :: (verticesA : [] Vector2, verticesB : [] Vector2) -> bool {
-    simplex_points : [..] Vector2;
-    evolve_result : Evolve_Result = .STILL_EVOLVING;
-    while evolve_result == .STILL_EVOLVING {
-        evolve_result = evolve_simplex(*simplex_points, verticesA, verticesB, *Vector2.{0, 0});
-    }
-
-    // or else not found
-    return ifx evolve_result == .FOUND_INTERSECTION then true else false;
-}
-
-evolve_simplex :: (simplex_points : *[..] Vector2, verticesA : [] Vector2, verticesB : [] Vector2, direction : *Vector2) -> Evolve_Result {
-    if simplex_points.count == {
-        case 0;
-            direction = *(average_point(verticesB) - average_point(verticesA));
-
-        case 1;
-            // flip the direction
-            direction = *(-1 * <<direction);
-
-        case 2;
-            b := simplex_points.data[1];
-            c := simplex_points.data[0];
-
-            // line cb is the line formed by the first two vertices
-            cb := b - c;
-            // is the line from the first vertex to the origin
-            c0 := -c;
-
-            // triple cross product calculates direction perp to cb in direction of the origin
-            direction = *triple_product(cb, c0, cb);
-
-        case 3;
-            // calculate if the simplex contains the origin
-            a := simplex_points.data[2];
-            b := simplex_points.data[1];
-            c := simplex_points.data[0];
-
-            a0 := -a; // vertex 2 to the origin
-            ab := b - a; // v2 to v1
-            ac := c - a; // v2 to v0
-
-            ab_perp := triple_product(ac, ab, ab);
-            ac_perp := triple_product(ab, ac, ac);
-
-            // already know that origin is inside first line segment, v0 to v1,
-            // due to last step (creating the direction vector towards origin using triple product of cb, c0, cb)
-            if (dot_product(ab_perp, a0) > 0) {
-                // origin outside line ab
-                // get rid of c and adda new support point in the direction of ab_perp
-                direction = *ab_perp;
-                //new_point := get_support(verticesA, verticesB, direction);
-                //simplex_points.data[0] = new_point;
-                array_unordered_remove_by_index(simplex_points, 0);
-            }
-            else if (dot_product(ac_perp, a0) > 0) {
-                // origin outside line ac
-                direction = *ac_perp;
-                //new_point := get_support(verticesA, verticesB, direction);
-                //simplex_points.data[1] = new_point;
-                array_unordered_remove_by_index(simplex_points, 1);
-            }
-            else {
-                // origin is inside both ab and ac, so it must be inside the triangle!
-                return .FOUND_INTERSECTION;
-            }
-
-        case;
-            print("Can't have a simplex with % vertices!", simplex_points.count);
-    }
-
-     evolve_result := ifx add_support(simplex_points, verticesA, verticesB, direction)
-        then Evolve_Result.STILL_EVOLVING else Evolve_Result.NO_INTERSECTION;
-    return evolve_result;
-}
-
-// To roughly compute average center. Ok as initial direction of simplex
-average_point :: (vertices : [] Vector2) -> Vector2 {
-    avg : Vector2;
-    for v : vertices {
-        avg.x += v.x;
-        avg.y += v.y;
-    }
-    avg.x /= vertices.count;
-    avg.y /= vertices.count;
-
-    return avg;
-}
-
-triple_product :: (a : Vector2, b : Vector2, c : Vector2) -> Vector2 {
-    ac := dot_product(a, c);
-    bc := dot_product(b, c);
-
-    return b * ac - a * bc;
-}
-
-// this is for 2d intersection
-to_world_pos :: (vertices : [] float32, pos : Vector3) -> [..] Vector2 {
-    vertices_vec2 : [..] Vector2;
-    last_x : float32;
-    for vertex, i: vertices {
-        if i % 2 == 0 {
-            last_x = vertex;
-        }
-        else {
-            array_add(*vertices_vec2, .{last_x + pos.x, vertex + pos.y});
-        }
-    }
-
-    return vertices_vec2;
-}
-*/
-
-
-/*
-// NOTE: Apparently this example was supposed to be for educational purposes only and is not robust enough to actually work
-gjk :: (verticesA : [] Vector2, verticesB : [] Vector2) -> bool {
-    a, b, c, d, ao, ab, ac, ab_perp, ac_perp : Vector2;
-    index : int;
-
-    posA := average_point(verticesA);
-    posB := average_point(verticesB);
-
-    direction := Vector2.{posA.x - posB.x, posA.y - posB.y};
-    // if initial direction is zero, set to arbitrary value
-    if direction.x == 0.0 && direction.y == 0.0 then direction.x = 1.0;
-
-    a = support(verticesA, verticesB, direction);
-    print("\n a = support() = %", a);
-    simplex : [3] Vector2;
-    simplex[0] = a;
-
-    if dot_product(a, direction) <= 0 {
-        print("\nExiting at dot_product 1, dot_product(a, direction) = %", dot_product(a, direction));
-        return false; // no collision
-    }
-    print("\na = %, dot_product(a, direction) = %, -a = % ", a, dot_product(a, direction), -a);
-    direction = -a;
-
-    while true {
-        a = support(verticesA, verticesB, direction);
-        index += 1;
-        simplex[index] = a;
-
-        //if dot_product(a, direction) <= 0 {
-        if (a.x * direction.x + a.y * direction.y) <= 0 {
-            print("\nExiting at dot_product 2, dot_product(a, direction) = %", dot_product(a, direction));
-            return false; // no collision
-        }
-
-        ao = -a;
-
-        // simplex has 2 points (a line segment)
-        if index < 2 {
-            b := simplex[0];
-            ab = b - a; // from point A to B
-            d = triple_product(ab, ao, ab); // normal to AB towards origin
-            if (direction.x * direction.x + direction.y + direction.y) == 0
-            then direction = perpendicular(ab);
-            continue; // skip to next iteration
-        }
-
-        b = simplex[1];
-        c = simplex[0];
-        ab = b - a;
-        ac = c - a;
-        ac_perp = triple_product(ab, ac, ac);
-
-        if dot_product(ac_perp, ao) >= 0 {
-            direction = ac_perp; // new direction is normal to AC towards origin
-        }
-        else {
-            ab_perp = triple_product(ac, ab, ab);
-            if dot_product(ab_perp, ao) < 0 then return true; // collision
-
-            simplex[0] = simplex[1]; // swap first element (point C)
-            direction = ab_perp; // swap element in the middle (point B)
-        }
-        simplex[1] = simplex[2];
-        index -= 1;
-    }
-
-    print("\nWe made it to the end, should be no collision.");
-    return false;
-}
-
-index_of_furthest_point :: (vertices : [] Vector2, direction : Vector2) -> int {
-    max_product := dot_product(direction, vertices[0]);
-    index : int;
-    for v, i : vertices {
-        product := dot_product(direction, v);
-        print("\nmax_product: %, product: %, i: %", max_product, product, i);
-        if (product > max_product) {
-            max_product = product;
-            index = i;
-        }
-    }
-
-    print("\n\tvertices: %, index: %", vertices, index);
-    return index;
-}
-
-// minkowski sum support
-support :: (verticesA : [] Vector2, verticesB : [] Vector2, direction : Vector2) -> Vector2 {
-    i := index_of_furthest_point(verticesA, direction);
-    j := index_of_furthest_point(verticesB, -direction);
-    print("\nverticesA[i] = %, verticesB[j] = %, verticesA[i] - verticesB[j] = %", verticesA[i], verticesB[j], verticesA[i] - verticesB[j]);
-    return verticesA[i] - verticesB[j];
-}
-
-// To roughly compute average center. Ok as initial direction of simplex
-average_point :: (vertices : [] Vector2) -> Vector2 {
-    avg : Vector2;
-    for v : vertices {
-        avg.x += v.x;
-        avg.y += v.y;
-    }
-    avg.x /= vertices.count;
-    avg.y /= vertices.count;
-
-    return avg;
-}
-
-perpendicular :: (v : Vector2) -> Vector2 {
-    return .{v.y, -v.x};
-}
-
-to_world_pos :: (vertices : [] float32, pos : Vector2) -> [..] Vector2 {
-    vertices_vec2 : [..] Vector2;
-    last_x : float32;
-    for vertex, i: vertices {
-        if i % 2 == 0 {
-            last_x = vertex;
-        }
-        else {
-            array_add(*vertices_vec2, .{last_x + pos.x, vertex + pos.y});
-        }
-    }
-
-    return vertices_vec2;
-}
-
-triple_product :: (a : Vector2, b : Vector2, c : Vector2) -> Vector2 {
-    ac := dot_product(a, c);
-    bc := dot_product(b, c);
-
-    return b * ac - a * bc;
-}
-*/
-/*
-triple_product :: (a : Vector3, b : Vector3, c : Vector3) -> Vector3 {
-    ac := dot_product(a, c);
-    bc := dot_product(b, c);
-
-    return b * ac - a * bc;
-}
-
-gjk :: (verticesA : [] Vector3, verticesB : [] Vector3, simplex_points : *[..] Vector3) -> bool {
-    unit_x : Vector3 = .{1, 0, 0};
-    support_point := support(unit_x, verticesA, verticesB);
-    collision := false;
-
-    //simplex_points : [..] Vector3;
-    //array_reset(*simplex_points);
-    //array_add(*simplex_points, support_point);
-    array_reset(simplex_points);
-    array_add(simplex_points, support_point);
-    direction := -support_point;
-
-    while true {
-        support_point = support(direction, verticesA, verticesB);
-
-        if dot_product(support_point, direction) <= 0 {
-            return false; // no collision
-        }
-
-        //array_add(*simplex_points, support_point);
-        array_add(simplex_points, support_point);
-
-        //if next_simplex(*simplex_points, *direction) {
-        if next_simplex(simplex_points, *direction) {
-            print("\nwe have reached inside the next_simplex if statement");
-            return true;
-        }
-    }
-
-    return collision;
-}
-
-next_simplex :: (simplex_points : *[..] Vector3, direction : *Vector3) -> bool {
-    if simplex_points.count == {
-        case 2; return line_simplex(simplex_points, direction);
-        case 3; return triangle_simplex(simplex_points, direction);
-        //case 4; return tetrahedron_simplex(simplex_points, direction);
-    }
-
-    // never should be here
-    return false;
-}
-
-line_simplex :: (simplex_points : *[..] Vector3, direction : *Vector3) -> bool {
-    a : Vector3 = simplex_points.data[0];
-    b : Vector3 = simplex_points.data[1];
-
-    ab := b - a;
-    ao := -a;
-
-    if same_direction(ab, ao) {
-        //direction = *cross_product(cross_product(ab, ao), ab);
-        direction = *triple_product(ab, ao, ab);
-    }
-    else {
-        array_reset(simplex_points);
-        array_add(simplex_points, a);
-        direction = *ao;
-    }
-
-    return false;
-}
-
-triangle_simplex :: (simplex_points : *[..] Vector3, direction : *Vector3) -> bool {
-    a := simplex_points.data[0];
-    b := simplex_points.data[1];
-    c := simplex_points.data[2];
-
-    ab := b - a;
-    ac := c - a;
-    ao := -a;
-
-    //abc := cross_product(ab, ac);
-    abc := triple_product(ab, ac, ac);
-
-    //if same_direction(cross_product(abc, ac), ao) {
-    if same_direction(abc, ao) {
-        if same_direction(ac, ao) {
-            array_reset(simplex_points);
-            array_add(simplex_points, a, c);
-
-            //direction = *cross_product(cross_product(ac, ao), ac);
-            direction = *triple_product(ac, ao, ac);
-        }
-        else {
-            array_reset(simplex_points);
-            array_add(simplex_points, a, b);
-            return line_simplex(simplex_points, direction);
-        }
-    }
-    else {
-        //if same_direction(cross_product(ab, abc), ao) {
-        if same_direction(triple_product(ab, abc, abc), ao) {
-            array_reset(simplex_points);
-            array_add(simplex_points, a, b);
-
-            return line_simplex(simplex_points, direction);
-        }
-        else {
-            if same_direction(abc, ao) {
-                direction = *abc;
-            }
-            else {
-                array_reset(simplex_points);
-                array_add(simplex_points, a, c, b);
-                direction = *-abc;
-            }
-        }
-    }
-    ("\nwe reached the end of triangle simplex!");
-    return true;
-    //return false;
-}
-
-tetrahedron_simplex :: (simplex_points : *[..] Vector3, direction : *Vector3) -> bool {
-    a := simplex_points.data[0];
-    b := simplex_points.data[1];
-    c := simplex_points.data[2];
-    d := simplex_points.data[3];
-
-    ab := b - a;
-    ac := c - a;
-    ad := d - a;
-    ao := -a;
-
-    abc := cross_product(ab, ac);
-    acd := cross_product(ac, ad);
-    adb := cross_product(ad, ab);
-
-    if same_direction(abc, ao) {
-        array_reset(simplex_points);
-        array_add(simplex_points, a, b, c);
-
-        return triangle_simplex(simplex_points, direction);
-    }
-
-    if same_direction(acd, ao) {
-        array_reset(simplex_points);
-        array_add(simplex_points, a, c, d);
-
-        return triangle_simplex(simplex_points, direction);
-    }
-
-    if same_direction(adb, ao) {
-        array_reset(simplex_points);
-        array_add(simplex_points, a, d, b);
-
-        return triangle_simplex(simplex_points, direction);
-    }
-
-    return true;
-}
-
-support :: (direction : Vector3, verticesA: [] Vector3, verticesB : [] Vector3) -> Vector3 {
-    return find_furthest_point (direction, verticesA)
-        - find_furthest_point(-direction, verticesB);
-}
-
-find_furthest_point :: (direction : Vector3, vertices : [] Vector3) -> Vector3 {
-    max_point : Vector3;
-    max_distance := -FLOAT32_MAX;
-
-    for vertex : vertices {
-        distance := dot_product(vertex, direction);
-        if distance > max_distance {
-            max_distance = distance;
-            max_point = vertex;
-        }
-    }
-    return max_point;
-}
-
-to_world_pos :: (vertices : [] float32, pos : Vector3) -> [..] Vector3 {
-    vertices_vec3 : [..] Vector3;
-    last_x : float32;
-    for vertex, i: vertices {
-        if i % 2 == 0 {
-            last_x = vertex;
-        }
-        else {
-            array_add(*vertices_vec3, .{last_x + pos.x, vertex + pos.y, 0.0 + pos.z});
-        }
-    }
-
-    return vertices_vec3;
-}
-*/
 
 not_equal_pos :: (arr : [] Vector3, arr2 : [] Vector3) -> bool {
     if arr.count != arr2.count then return true;
@@ -1278,7 +874,6 @@ to_vertices :: (vs : [] Vector3) -> [] float32 {
     for v : vs {
         array_add(*verts, v.x, v.y, v.z);
     }
-    //print("\nvs: %\tverts: %", vs, verts);
     return verts;
 }
 

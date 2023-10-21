@@ -751,14 +751,13 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
 
     // To loop through any new polytopes until a point of the polytope is also a point
     // on the minkowski difference (support point and v have the same distance).
-    while keep_looping && loop_num < 3 { //&& loop_num < 10 {
+    while keep_looping && loop_num < 10 {
         if loop_num > 0 {
             array_reset(*faces);
             faces = get_faces(polytope, false);
         }
 
         min_normal := normals[min_face].normal;
-        //min_v := find_centroid(faces[min_face].a, faces[min_face].b, faces[min_face].c);
         support_point := get_support(verticesA, verticesB, min_normal);
         min_v := find_closest_point_on_polyhedron_for_point(support_point, faces);
         proj := projection(support_point, min_v);
@@ -774,7 +773,10 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
                 v := find_centroid(f.a, f.b, f.c);
                 n := normals[i].normal;
 
-                if dot_product((support_point - v), n) > 0 {
+                // We've got remember to subtract from v, otherwise the vector would be the origin to
+                // the point (I was having trouble with the normals being wrong and creating a concave
+                // simplex)
+                if dot_product((support_point - v), n - v) > 0 {
                     array_add(*faces_to_remove, i);
 
                     points_for_edges : [..] Vector3;
@@ -793,9 +795,7 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
                 array_unordered_remove_by_index(*faces, faces_to_remove[f]);
                 f -= 1;
             }
-
             for edge : edges {
-                //print("\n\t>>> Adding face {%, %, %} to faces: %", edge.a, edge.b, support_point, faces);
                 array_add_if_unique_face(*faces, Face.{edge.a, edge.b, support_point});
             }
 
@@ -814,14 +814,12 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
             smallest_length_polytope = polytope;
             smallest_length_normals = normals;
         }
-        //print("\nInside epa LOOP, Context.allocator = %, \n\tbytes occupied = %", context.allocator, context.temporary_storage);
         loop_num += 1;
     }
 
     print("\n---------------------------------------------------------------------------------Break!");
-    print("\nInside epa, Context.allocator = %, \n\tbytes occupied = %", context.allocator, context.temporary_storage);
-    return polytope, normals;
-    //return smallest_length_polytope, smallest_length_normals;
+    //return polytope, normals;
+    return smallest_length_polytope, smallest_length_normals;
 }
 
 get_faces :: (polytope : [] Vector3, iterate_tetrahedron_indices : bool) -> [..] Face {

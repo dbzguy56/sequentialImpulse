@@ -230,13 +230,16 @@ main :: () {
     triangle_pos := Vector3.{-2.0, 0.0, 0.0};
     square_pos := Vector3.{0.0, 0.0, 0.0};
     //square_pos := Vector3.{-3.0, 2.0, 0.0};
-    camera_pos := xyz(0.0, 0.0, 10.0);
-    camera_front := xyz(0.0, 0.0, -1.0);
+    //camera_pos := xyz(0.0, 0.0, 10.0);
+    camera_pos := xyz(1.828257, 0.742078, -0.525561);
+    //camera_front := xyz(0.0, 0.0, -1.0);
+    camera_front := xyz(-0.979051, -0.201955, -0.025966);
     camera_up := xyz(0.0, 1.0, 0.0);
     delta_time := 0.0;
     last_frame := 0.0;
     pitch := 0.0;
-    yaw := -90.0;
+    //yaw := -90.0;
+    yaw := 180.0;
     roll := 0.0;
     fov := 45.0;
     sensitivity := 0.1;
@@ -244,7 +247,9 @@ main :: () {
     collision : bool;
     collision_normal : Vector3;
     face_normals : [..] Face_Normal;
+    face_normals.allocator = temp;
     polytope : [..] Vector3;
+    polytope.allocator = temp;
 
     running := true;
     while running {
@@ -286,13 +291,20 @@ main :: () {
             triangle_pos.y *= -1.0;
         }
 
+        triangle_pos = .{-0.440001, 0, 0};
         tetrahedron_world_pos := to_world_pos(tetrahedron_vertices, triangle_pos);
         cube_world_pos := to_world_pos(cube_vertices, square_pos);
         simplex_points : [..] Vector3;
+        simplex_points.allocator = temp;
         collision = gjk(tetrahedron_world_pos, cube_world_pos, *simplex_points);
         if collision {
             array_reset(*polytope);
-            polytope, face_normals = epa(simplex_points, tetrahedron_world_pos, cube_world_pos);
+            new_context : Context;
+            new_context.allocator = temp;
+            push_context new_context {
+                polytope, face_normals = epa(simplex_points, tetrahedron_world_pos, cube_world_pos);
+            }
+            print("\nOutside epa, Context.allocator = %, \n\tbytes occupied = %", context.allocator, context.temporary_storage.total_bytes_occupied);
             print("\nThere is a collision!");
         }
         else {
@@ -350,7 +362,7 @@ main :: () {
                                                    , 1920.0 / 1080.0
                                                    , 0.1
                                                    , 100.0);
-        projection_loc := glGetUniformLocation(shaderProgram, "projection");
+        projection_loc := glGetUniformLocation(shaderProgram, "proj");
         glUniformMatrix4fv(projection_loc, 1, GL_TRUE, projection_matrix.floats.data);
         model_loc := glGetUniformLocation(shaderProgram, "model");
 
@@ -366,7 +378,7 @@ main :: () {
         m_scaled := make_scale_matrix4(xyz(scale_factor, scale_factor, scale_factor));
         m_result := m_trans * m_scaled;
         glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
-        glDrawArrays(GL_TRIANGLES, 0, 12);
+        //glDrawArrays(GL_TRIANGLES, 0, 12);
 
 
         // cube
@@ -376,7 +388,7 @@ main :: () {
         m_scaled = make_scale_matrix4(xyz(scale_factor, scale_factor, scale_factor));
         m_result = m_trans * m_scaled;
         glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+        //glDrawArrays(GL_TRIANGLES, 0, 36);
 
         if collision {
             simplex_vertices := to_vertices(simplex_points);
@@ -417,6 +429,7 @@ main :: () {
 
             // face normals
             face_normals_with_polytope : [..] Vector3;
+            face_normals_with_polytope.allocator = temp;
             for n, i : face_normals {
                 face := i * 3;
                 array_add(*face_normals_with_polytope,
@@ -429,15 +442,23 @@ main :: () {
             glBufferData(GL_ARRAY_BUFFER, face_normals_vertices.count * size_of(float32), face_normals_vertices.data, GL_STATIC_DRAW);
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * size_of(float), null);
             glEnableVertexAttribArray(0);
+            //print("\nface_normals_vertices: ");
+            l := 0;
+            while l < face_normals_vertices.count {
+                //print("\n\t, {%, %, %}", face_normals_vertices[l], face_normals_vertices[l + 1], face_normals_vertices[l + 2]);
+                l += 3;
+            }
 
             glUniform3f(color_loc, to_rgb(248), to_rgb(222), to_rgb(34));
             m_trans = make_translation_matrix4(.{0.0, 0.0, 0.0});
             m_result = m_trans;
             glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
-            glDrawArrays(GL_LINES, 0, 8);
+            glDrawArrays(GL_LINES, 0, xx face_normals_vertices.count);
 
             // polytope
             polytope_vertices := to_vertices(polytope);
+            //polytope_vertices : [..] float32;
+            //array_add(*polytope_vertices, -1.930001, -1, -0.5, -1.930001, 0, -1, -1.930001, -1, -0.5);
             glBindVertexArray(simplex_vao);
             glBindBuffer(GL_ARRAY_BUFFER, simplex_vbo);
             glBufferData(GL_ARRAY_BUFFER, polytope_vertices.count * size_of(float32), polytope_vertices.data, GL_STATIC_DRAW);
@@ -500,6 +521,96 @@ main :: () {
     }
 }
 
+find_closest_point_on_triangle_for_point :: (p : Vector3, face : Face) -> Vector3 {
+    // cross_products a little expensive, this achieves the same result using the Lagrange identity
+    // "(a `cross` b) `dot` (c `cross` d) == (a `dot` c) (b `dot` d) - (a `dot` d) (b `dot` c)"
+    // snom = d1
+    // sdenom = -d3
+    // tnom = d2
+    // tdenom = -d6
+    // unom = d4 - d3
+    // udenom = d5 - d6
+
+    a := face.a;
+    b := face.b;
+    c := face.c;
+
+    // Check if P in vertex region outside vertex A
+    ab := b - a;
+    ac := c - a;
+    ap := p - a;
+
+    d1 := dot_product(ab, ap);
+    d2 := dot_product(ac, ap);
+    if (d1 <= 0.0 && d2 <= 0.0) then return a; // barycentric coordinates (1, 0, 0)
+
+    // Check if P in vertex region outside vertex B
+    bp := p - b;
+    d3 := dot_product(ab, bp);
+    d4 := dot_product(ac, bp);
+    if (d3 >= 0.0 && d4 <= d3) then return b; // barycentric coordinates (0, 1, 0)
+
+    // Check if P in edge region of AB, if so return proijection of P onto AB
+    vc := d1 * d4 - d3 * d2;
+    if (vc < 0.0 && d1 >= 0.0 && d3 <= 0.0) {
+        v := d1 / (d1 - d3);
+        return a + v * ab; // barycentric coordinates (1 - v, v, 0)
+    }
+
+    // Check if P in vertex region outside vertex C
+    cp := p - c;
+    d5 := dot_product(ab, cp);
+    d6 := dot_product(ac, cp);
+    if (d6 >= 0.0 && d5 <= d6) return c; // barycentric coordinates (0, 0, 1)
+
+    // Check if P in edge region of AC, if so return projection of P onto AC
+    vb := d5 * d2 - d1 * d6;
+    if (vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0) {
+        w := d2 / (d2 - d6);
+        return a + w * ac; // barycentric coordinates (1 - w, 0, w)
+    }
+
+    // Check if P in region of BC, if so return projection of P onto BC
+    va := d3 * d6 - d5 * d4;
+    if (va <= 0.0 && (d4 - d3) >= 0.0 && (d5 - d6) >= 0.0) {
+        w := (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        return b + w * (c - b); // barycentric coordinates (0, 1 - w, w)
+    }
+
+    // P inside face region. Compute Q through it's barycentric compute (u, v, w)
+    denom := 1.0 / (va + vb + vc);
+    v := vb * denom;
+    w := vc * denom;
+
+    return a + v * ab + w * ac; // == uA + vB + wC, u == va * denom == 1 - v - w
+}
+
+is_point_outside_of_plane :: (p : Vector3, f : Face) -> bool {
+    // might need to use a different version for tetrahedron (because we cannot assume winding order)
+    a := f.a;
+    b := f.b;
+    c := f.c;
+    cross := cross_product(b - a, c - a);
+
+    return (dot_product(p - a, cross) >= 0.0);
+}
+
+find_closest_point_on_polyhedron_for_point :: (point : Vector3, faces : [] Face) -> Vector3 {
+    closest_point := point;
+    best_square_distance := FLOAT32_MAX;
+
+    for f : faces {
+        q := find_closest_point_on_triangle_for_point(point, f);
+        sq_dist := dot_product(q - point, q - point);
+        if sq_dist < best_square_distance {
+            best_square_distance = sq_dist;
+            closest_point = q;
+        }
+    }
+
+    return closest_point;
+}
+
 Contact :: struct {
 // 1 for each collider
     points_world : [2] Vector3;
@@ -549,6 +660,7 @@ compute_tangents :: (normal : Vector3) -> [2] Vector3 {
 
 to_edges :: (arr : [] Vector3) -> [..] Edge {
     edge_pairs : [..] Edge;
+    edge_pairs.allocator = temp;
 
     i := 0;
     while i < arr.count {
@@ -575,7 +687,8 @@ get_face_normals_and_min_face :: (faces : [..] Face, polytope : [] Vector3) -> [
     min_face := 0;
     min_distance := FLOAT32_MAX;
     face_normals : [..] Face_Normal;
-
+    face_normals.allocator = temp;
+    //print("\n-->Faces: %", faces);
     for f, i : faces {
         a := f.a;
         b := f.b;
@@ -595,20 +708,22 @@ get_face_normals_and_min_face :: (faces : [..] Face, polytope : [] Vector3) -> [
         // displayed at origin, rather than off the face (because points
         // "a, b, c" are all just points from origin to A, etc)
         normal = centroid + normal;
+        //print("\nAdding normal: %, for face {%, %, %}", normal, a, b, c);
         array_add(*face_normals, .{normal, distance, centroid});
+        //print("\nFace normals:");
+        for f : face_normals {
+            //print("\n%", f);
+        }
 
         if distance < min_distance {
             min_face = i;
             min_distance = distance;
         }
     }
-
     return face_normals, min_face;
 }
 
 epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3) -> [..] Vector3, [..] Face_Normal {
-    //initial_polytope := array_copy(polytope);
-    //faces_vertices := array_copy(tetrahedron_indices);
     // Initially we find the closest face to the origin.
     // If the face of point 'v' on the polytope "sees" the support point,
     // we need to remove that edge so that we can add the new support point
@@ -620,59 +735,136 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
     // along with the new support to make the new faces. Finally the new faces are added
     // to the polytope.
 
-    // keep_looping := true;
-    // To loop through any new polytopes until a point of the polytope is also a point
-    // on the minkowski difference (support point and v have the same distance).
+    /*
     faces : [..] Face;
     i := 0;
     while i < tetrahedron_indices.count {
         array_add(*faces, Face.{ polytope[tetrahedron_indices[i]]
-                 , polytope[tetrahedron_indices[i + 1]]
-                 , polytope[tetrahedron_indices[i + 2]]
-                 });
+                                 , polytope[tetrahedron_indices[i + 1]]
+                                 , polytope[tetrahedron_indices[i + 2]]
+                               });
         i += 3;
+    }*/
+    faces : [..] Face = get_faces(polytope, true);
+    print("\nFaces allocator = %", faces.allocator);
+    new_polytope : [..] Vector3;
+    normals : [..] Face_Normal;
+    min_face : s64;
+    keep_looping := true;
+    loop_num := 0;
+    // Sometimes when the origin is very close to the edge of the minkowski difference,
+    // there is numerical instability. So we keep track of the smallest value of
+    // length(projection(support_point, v) - v)
+    smallest_length : float32 = FLOAT32_MAX;
+    smallest_length_polytope : [..] Vector3;
+    smallest_length_normals : [..] Face_Normal;
+
+    // To loop through any new polytopes until a point of the polytope is also a point
+    // on the minkowski difference (support point and v have the same distance).
+    while keep_looping && loop_num < 6  { //&& loop_num < 10 {
+        if loop_num > 0 {
+            // initial faces are already created above, this is now using `new_polytope` (copied to `polytope`)
+            array_reset(*faces);
+            //print("\n---- Polytope b4 getting faces: %", polytope);
+            faces = get_faces(polytope, false);
+            //print("\n---- Got faces: %", faces);
+        }
+
+        normals, min_face = get_face_normals_and_min_face(faces, polytope);
+        min_normal := normals[min_face].normal; // TODO: NEW NORMALS??????xsxs
+        //min_v := find_centroid(faces[min_face].a, faces[min_face].b, faces[min_face].c);
+        support_point := get_support(verticesA, verticesB, min_normal);
+        min_v := find_closest_point_on_polyhedron_for_point(support_point, faces);
+        proj := projection(support_point, min_v);
+
+        if proj == min_v {
+            keep_looping = false;
+        }
+        else {
+            faces_to_remove : [..] s64;
+            edges : [..] Edge;
+
+            for f, i : faces {
+                v := find_centroid(f.a, f.b, f.c);
+                n := normals[i].normal;
+
+                if dot_product((support_point - v), n) > 0 {
+                    array_add(*faces_to_remove, i);
+
+                    points_for_edges : [..] Vector3;
+                    array_add(*points_for_edges, f.a, f.b, f.c);
+                    edges_in_face := to_edges(points_for_edges);
+
+                    for edge : edges_in_face {
+                        add_if_unique_edge(*edges, edge);
+                    }
+                }
+            }
+
+            // Remove old faces before adding edges/points for new face (using new support point).
+            f := faces_to_remove.count - 1;
+            while f >= 0 {
+                array_unordered_remove_by_index(*faces, faces_to_remove[f]);
+                f -= 1;
+            }
+
+            for edge : edges {
+                //print("\n\t>>> Adding face {%, %, %} to faces: %", edge.a, edge.b, support_point, faces);
+                array_add_if_unique_face(*faces, Face.{edge.a, edge.b, support_point});
+            }
+
+            //array_reset_keeping_memory(*new_polytope);
+            array_reset(*polytope);
+            for f : faces {
+                //print("\n\tADDing to new_poly face: {%, %, %}, to list: % ", f.a, f.b, f.c, new_polytope);
+                //array_add(*new_polytope, f.a, f.b, f.c);
+                array_add(*polytope, f.a, f.b, f.c);
+            }
+            //print("\nFinal polytope after adding faces: %",  new_polytope);
+        }
+
+        current_length := length(proj - min_v);
+        if current_length < smallest_length {
+            smallest_length = current_length;
+            //smallest_length_polytope = new_polytope;
+            smallest_length_polytope = polytope;
+            smallest_length_normals = normals;
+        }
+        print("\nInside epa LOOP, Context.allocator = %, \n\tbytes occupied = %", context.allocator, context.temporary_storage);
+        loop_num += 1;
     }
 
-    normals, min_face := get_face_normals_and_min_face(faces, polytope);
-    min_normal := normals[min_face].normal;
-    support_point := get_support(verticesA, verticesB, min_normal);
-    faces_to_remove : [..] s64;
-    edges : [..] Edge;
+    print("\n---------------------------------------------------------------------------------Break!");
+    print("\nInside epa, Context.allocator = %, \n\tbytes occupied = %", context.allocator, context.temporary_storage);
+    //return new_polytope, normals;
+    return polytope, normals;
+    //return smallest_length_polytope, smallest_length_normals;
+}
 
-    for f, i : faces {
-        v := find_centroid(f.a, f.b, f.c);
-        n := normals[i].normal;
-
-        if dot_product((support_point - v), n) > 0 {
-            array_add(*faces_to_remove, i);
-
-            points_for_edges : [..] Vector3;
-            array_add(*points_for_edges, f.a, f.b, f.c);
-            edges_in_face := to_edges(points_for_edges);
-
-            for edge : edges_in_face {
-                add_if_unique_edge(*edges, edge);
-            }
+get_faces :: (polytope : [] Vector3, iterate_tetrahedron_indices : bool) -> [..] Face {
+    faces : [..] Face;
+    faces.allocator = temp;
+    i := 0;
+    if iterate_tetrahedron_indices {
+        while i < tetrahedron_indices.count {
+            array_add(*faces, Face.{ polytope[tetrahedron_indices[i]]
+                                     , polytope[tetrahedron_indices[i + 1]]
+                                     , polytope[tetrahedron_indices[i + 2]]
+                                   });
+            i += 3;
+        }
+    } else {
+        while i < polytope.count {
+            array_add(*faces, Face.{ polytope[i]
+                                     , polytope[i + 1]
+                                     , polytope[i + 2]
+                                   });
+            // polytope should always be divisible by 3
+            i += 3;
         }
     }
 
-    // Remove old faces before adding edges/points for new face (using new support point).
-    f := faces_to_remove.count - 1;
-    while f >= 0 {
-        array_unordered_remove_by_index(*faces, faces_to_remove[f]);
-        f -= 1;
-    }
-
-    for edge : edges {
-        array_add(*faces, Face.{edge.a, edge.b, support_point});
-    }
-
-    new_polytope : [..] Vector3;
-    for f : faces {
-        array_add(*new_polytope, f.a, f.b, f.c);
-    }
-
-    return new_polytope, normals;
+    return faces;
 }
 
 Face :: struct {
@@ -690,6 +882,25 @@ Face_Normal :: struct {
     normal : Vector3;
     distance : float32;
     position : Vector3;
+}
+
+array_add_if_unique_face :: (faces : *[..] Face, face : Face) {
+     found := array_find_face(<<faces, face);
+     if !found {
+         array_add(faces, face);
+     }
+ }
+
+array_find_face :: (arr : [] Face, face: Face) -> bool {
+    for f : arr {
+        if
+            f.a == face.a && f.b == face.b && f.c == face.c
+            || f.a == face.b && f.b == face.c && f.c == face.a
+            || f.a == face.c && f.b == face.a && f.c == face.b
+            then return true;
+
+    }
+    return false;
 }
 
 add_if_unique_edge :: (edges : *[..] Edge, edge : Edge) {
@@ -843,6 +1054,7 @@ average_point :: (vertices : [] Vector3) -> Vector3 {
 
 to_world_pos :: (vertices : [] float32, pos : Vector3) -> [..] Vector3 {
     vertices_vec3 : [..] Vector3;
+    vertices_vec3.allocator = temp;
     if vertices.count % 3 == 0 {
         i := 0;
         while i != vertices.count {
@@ -871,6 +1083,7 @@ same_direction :: (direction : Vector3, ao : Vector3) -> bool {
 
 to_vertices :: (vs : [] Vector3) -> [] float32 {
     verts : [..] float32;
+    verts.allocator = temp;
     for v : vs {
         array_add(*verts, v.x, v.y, v.z);
     }
@@ -885,16 +1098,20 @@ deg_to_rad :: (deg: float) -> float {
     return deg * (PI / 180);
 }
 
+projection :: (a : Vector3, b : Vector3) -> Vector3 {
+    return ((dot_product(a, b)) / (dot_product(b, b))) * b;
+}
+
 VERTEX_SHADER :: #string DONE
 #version 330 core
 layout (location = 0) in vec3 aPos;
 
 uniform mat4 model;
 uniform mat4 view;
-uniform mat4 projection;
+uniform mat4 proj;
 
 void main() {
-    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    gl_Position = proj * view * model * vec4(aPos, 1.0);
 }
 DONE
 

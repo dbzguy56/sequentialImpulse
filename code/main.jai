@@ -735,19 +735,8 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
     // along with the new support to make the new faces. Finally the new faces are added
     // to the polytope.
 
-    /*
-    faces : [..] Face;
-    i := 0;
-    while i < tetrahedron_indices.count {
-        array_add(*faces, Face.{ polytope[tetrahedron_indices[i]]
-                                 , polytope[tetrahedron_indices[i + 1]]
-                                 , polytope[tetrahedron_indices[i + 2]]
-                               });
-        i += 3;
-    }*/
     faces : [..] Face = get_faces(polytope, true);
     print("\nFaces allocator = %", faces.allocator);
-    new_polytope : [..] Vector3;
     normals : [..] Face_Normal;
     min_face : s64;
     keep_looping := true;
@@ -758,20 +747,17 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
     smallest_length : float32 = FLOAT32_MAX;
     smallest_length_polytope : [..] Vector3;
     smallest_length_normals : [..] Face_Normal;
+    normals, min_face = get_face_normals_and_min_face(faces, polytope);
 
     // To loop through any new polytopes until a point of the polytope is also a point
     // on the minkowski difference (support point and v have the same distance).
-    while keep_looping && loop_num < 6  { //&& loop_num < 10 {
+    while keep_looping && loop_num < 3 { //&& loop_num < 10 {
         if loop_num > 0 {
-            // initial faces are already created above, this is now using `new_polytope` (copied to `polytope`)
             array_reset(*faces);
-            //print("\n---- Polytope b4 getting faces: %", polytope);
             faces = get_faces(polytope, false);
-            //print("\n---- Got faces: %", faces);
         }
 
-        normals, min_face = get_face_normals_and_min_face(faces, polytope);
-        min_normal := normals[min_face].normal; // TODO: NEW NORMALS??????xsxs
+        min_normal := normals[min_face].normal;
         //min_v := find_centroid(faces[min_face].a, faces[min_face].b, faces[min_face].c);
         support_point := get_support(verticesA, verticesB, min_normal);
         min_v := find_closest_point_on_polyhedron_for_point(support_point, faces);
@@ -813,30 +799,27 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
                 array_add_if_unique_face(*faces, Face.{edge.a, edge.b, support_point});
             }
 
-            //array_reset_keeping_memory(*new_polytope);
             array_reset(*polytope);
             for f : faces {
-                //print("\n\tADDing to new_poly face: {%, %, %}, to list: % ", f.a, f.b, f.c, new_polytope);
-                //array_add(*new_polytope, f.a, f.b, f.c);
                 array_add(*polytope, f.a, f.b, f.c);
             }
-            //print("\nFinal polytope after adding faces: %",  new_polytope);
         }
+
+        // Make sure to calculate normals with new faces
+        normals, min_face = get_face_normals_and_min_face(faces, polytope);
 
         current_length := length(proj - min_v);
         if current_length < smallest_length {
             smallest_length = current_length;
-            //smallest_length_polytope = new_polytope;
             smallest_length_polytope = polytope;
             smallest_length_normals = normals;
         }
-        print("\nInside epa LOOP, Context.allocator = %, \n\tbytes occupied = %", context.allocator, context.temporary_storage);
+        //print("\nInside epa LOOP, Context.allocator = %, \n\tbytes occupied = %", context.allocator, context.temporary_storage);
         loop_num += 1;
     }
 
     print("\n---------------------------------------------------------------------------------Break!");
     print("\nInside epa, Context.allocator = %, \n\tbytes occupied = %", context.allocator, context.temporary_storage);
-    //return new_polytope, normals;
     return polytope, normals;
     //return smallest_length_polytope, smallest_length_normals;
 }

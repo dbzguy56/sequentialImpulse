@@ -230,16 +230,16 @@ main :: () {
     triangle_pos := Vector3.{-2.0, 0.0, 0.0};
     square_pos := Vector3.{0.0, 0.0, 0.0};
     //square_pos := Vector3.{-3.0, 2.0, 0.0};
-    //camera_pos := xyz(0.0, 0.0, 10.0);
-    camera_pos := xyz(1.828257, 0.742078, -0.525561);
-    //camera_front := xyz(0.0, 0.0, -1.0);
-    camera_front := xyz(-0.979051, -0.201955, -0.025966);
+    camera_pos := xyz(0.0, 0.0, 10.0);
+    //camera_pos := xyz(1.828257, 0.742078, -0.525561);
+    camera_front := xyz(0.0, 0.0, -1.0);
+    //camera_front := xyz(-0.979051, -0.201955, -0.025966);
     camera_up := xyz(0.0, 1.0, 0.0);
     delta_time := 0.0;
     last_frame := 0.0;
     pitch := 0.0;
-    //yaw := -90.0;
-    yaw := 180.0;
+    yaw := -90.0;
+    //yaw := 180.0;
     roll := 0.0;
     fov := 45.0;
     sensitivity := 0.1;
@@ -291,7 +291,6 @@ main :: () {
             triangle_pos.y *= -1.0;
         }
 
-        triangle_pos = .{-0.440001, 0, 0};
         tetrahedron_world_pos := to_world_pos(tetrahedron_vertices, triangle_pos);
         cube_world_pos := to_world_pos(cube_vertices, square_pos);
         simplex_points : [..] Vector3;
@@ -304,7 +303,6 @@ main :: () {
             push_context new_context {
                 polytope, face_normals = epa(simplex_points, tetrahedron_world_pos, cube_world_pos);
             }
-            print("\nOutside epa, Context.allocator = %, \n\tbytes occupied = %", context.allocator, context.temporary_storage.total_bytes_occupied);
             print("\nThere is a collision!");
         }
         else {
@@ -378,7 +376,7 @@ main :: () {
         m_scaled := make_scale_matrix4(xyz(scale_factor, scale_factor, scale_factor));
         m_result := m_trans * m_scaled;
         glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
-        //glDrawArrays(GL_TRIANGLES, 0, 12);
+        glDrawArrays(GL_TRIANGLES, 0, 12);
 
 
         // cube
@@ -388,7 +386,7 @@ main :: () {
         m_scaled = make_scale_matrix4(xyz(scale_factor, scale_factor, scale_factor));
         m_result = m_trans * m_scaled;
         glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
-        //glDrawArrays(GL_TRIANGLES, 0, 36);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
 
         if collision {
             simplex_vertices := to_vertices(simplex_points);
@@ -442,12 +440,6 @@ main :: () {
             glBufferData(GL_ARRAY_BUFFER, face_normals_vertices.count * size_of(float32), face_normals_vertices.data, GL_STATIC_DRAW);
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * size_of(float), null);
             glEnableVertexAttribArray(0);
-            //print("\nface_normals_vertices: ");
-            l := 0;
-            while l < face_normals_vertices.count {
-                //print("\n\t, {%, %, %}", face_normals_vertices[l], face_normals_vertices[l + 1], face_normals_vertices[l + 2]);
-                l += 3;
-            }
 
             glUniform3f(color_loc, to_rgb(248), to_rgb(222), to_rgb(34));
             m_trans = make_translation_matrix4(.{0.0, 0.0, 0.0});
@@ -457,8 +449,6 @@ main :: () {
 
             // polytope
             polytope_vertices := to_vertices(polytope);
-            //polytope_vertices : [..] float32;
-            //array_add(*polytope_vertices, -1.930001, -1, -0.5, -1.930001, 0, -1, -1.930001, -1, -0.5);
             glBindVertexArray(simplex_vao);
             glBindBuffer(GL_ARRAY_BUFFER, simplex_vbo);
             glBufferData(GL_ARRAY_BUFFER, polytope_vertices.count * size_of(float32), polytope_vertices.data, GL_STATIC_DRAW);
@@ -620,44 +610,6 @@ Contact :: struct {
     penetration_depth : float32;
 }
 
-compute_tangents :: (normal : Vector3) -> [2] Vector3 {
-    abs_x := abs(normal.x);
-    abs_y := abs(normal.y);
-    abs_z := abs(normal.z);
-    axis : Vector3;
-
-    if abs_x > abs_y {
-        if abs_x > abs_z {
-            axis.x = 1.0; // X > Y > Z, X > Z > Y
-        }
-        else {
-            axis.z = 1.0; // Z > X > Y
-        }
-    }
-    else {
-        if abs_y > abs_z {
-            axis.y = 1.0; // Y > X > Z, Y > Z > X
-        }
-        else {
-            axis.z = 1.0; // Z > Y > X
-        }
-    }
-
-    arr : [2] Vector3;
-    //arr[0] = normalize_or_z_axis(cross_product(normal, axis));
-    //arr[1] = normalize_or_z_axis(cross_product(normal, arr[0]));
-
-    if normal.x >= 0.57735 {
-        arr[0] = .{normal.y, -normal.x, 0.0};
-    }
-    else {
-        arr[0] = .{0.0, normal.z, -normal.y};
-    }
-    arr[0] = normalize_or_z_axis(arr[0]);
-    arr[1] = cross_product(normal, arr[0]);
-    return arr;
-}
-
 to_edges :: (arr : [] Vector3) -> [..] Edge {
     edge_pairs : [..] Edge;
     edge_pairs.allocator = temp;
@@ -675,7 +627,6 @@ to_edges :: (arr : [] Vector3) -> [..] Edge {
     return edge_pairs;
 }
 
-
 find_centroid :: (a : Vector3, b : Vector3, c : Vector3) -> Vector3 {
     return Vector3.{ (a.x + b.x + c.x) / 3
                      , (a.y + b.y + c.y) / 3
@@ -688,16 +639,14 @@ get_face_normals_and_min_face :: (faces : [..] Face, polytope : [] Vector3) -> [
     min_distance := FLOAT32_MAX;
     face_normals : [..] Face_Normal;
     face_normals.allocator = temp;
-    //print("\n-->Faces: %", faces);
+
     for f, i : faces {
         a := f.a;
         b := f.b;
         c := f.c;
 
         normal := normalize_or_z_axis(cross_product(b - a, c - a));
-
         centroid := find_centroid(a, b, c);
-
         distance := dot_product(normal, a);
         if distance < 0 {
             normal *= -1;
@@ -708,12 +657,7 @@ get_face_normals_and_min_face :: (faces : [..] Face, polytope : [] Vector3) -> [
         // displayed at origin, rather than off the face (because points
         // "a, b, c" are all just points from origin to A, etc)
         normal = centroid + normal;
-        //print("\nAdding normal: %, for face {%, %, %}", normal, a, b, c);
         array_add(*face_normals, .{normal, distance, centroid});
-        //print("\nFace normals:");
-        for f : face_normals {
-            //print("\n%", f);
-        }
 
         if distance < min_distance {
             min_face = i;
@@ -736,7 +680,6 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
     // to the polytope.
 
     faces : [..] Face = get_faces(polytope, true);
-    print("\nFaces allocator = %", faces.allocator);
     normals : [..] Face_Normal;
     min_face : s64;
     keep_looping := true;
@@ -817,8 +760,6 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
         loop_num += 1;
     }
 
-    print("\n---------------------------------------------------------------------------------Break!");
-    //return polytope, normals;
     return smallest_length_polytope, smallest_length_normals;
 }
 

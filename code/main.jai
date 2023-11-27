@@ -186,6 +186,7 @@ main :: () {
     glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * size_of(float), null);
     glEnableVertexAttribArray(0);
 */
+    // TODO: cleanup all of these repeated gens and binds
     glGenVertexArrays(1, *square_vao);
     glGenBuffers(1, *square_ebo);
     glGenBuffers(1, *square_vbo);
@@ -447,20 +448,22 @@ main :: () {
             glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
             glDrawArrays(GL_LINES, 0, xx face_normals_vertices.count);
 
-            // polytope
-            polytope_vertices := to_vertices(polytope);
-            glBindVertexArray(simplex_vao);
-            glBindBuffer(GL_ARRAY_BUFFER, simplex_vbo);
-            glBufferData(GL_ARRAY_BUFFER, polytope_vertices.count * size_of(float32), polytope_vertices.data, GL_STATIC_DRAW);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * size_of(float), null);
-            glEnableVertexAttribArray(0);
+            if polytope.count > 4 {
+                // polytope
+                polytope_vertices := to_vertices(polytope);
+                glBindVertexArray(simplex_vao);
+                glBindBuffer(GL_ARRAY_BUFFER, simplex_vbo);
+                glBufferData(GL_ARRAY_BUFFER, polytope_vertices.count * size_of(float32), polytope_vertices.data, GL_STATIC_DRAW);
+                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * size_of(float), null);
+                glEnableVertexAttribArray(0);
 
-            glUniform3f(color_loc, to_rgb(171), to_rgb(32), to_rgb(253));
-            m_trans = make_translation_matrix4(.{0.0, 0.0, 0.0});
-            m_scaled = make_scale_matrix4(xyz(scale_factor, scale_factor, scale_factor));
-            m_result = m_trans * m_scaled;
-            glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
-            glDrawArrays(GL_TRIANGLES, 0, xx polytope_vertices.count);
+                glUniform3f(color_loc, to_rgb(171), to_rgb(32), to_rgb(253));
+                m_trans = make_translation_matrix4(.{0.0, 0.0, 0.0});
+                m_scaled = make_scale_matrix4(xyz(scale_factor, scale_factor, scale_factor));
+                m_result = m_trans * m_scaled;
+                glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
+                glDrawArrays(GL_TRIANGLES, 0, xx polytope_vertices.count);
+            }
         }
 
         // wireframe off
@@ -600,7 +603,7 @@ find_closest_point_on_polyhedron_for_point :: (point : Vector3, faces : [] Face)
 
     return closest_point;
 }
-
+/*
 Contact :: struct {
 // 1 for each collider
     points_world : [2] Vector3;
@@ -609,7 +612,7 @@ Contact :: struct {
     tangents : [2] Vector3;
     penetration_depth : float32;
 }
-
+*/
 to_edges :: (arr : [] Vector3) -> [..] Edge {
     edge_pairs : [..] Edge;
     edge_pairs.allocator = temp;
@@ -679,6 +682,8 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
     // along with the new support to make the new faces. Finally the new faces are added
     // to the polytope.
 
+    // TODO: We need to clean this up, too many copies of the same points,
+    // make one source of "truth" (prob with indices refering to original)
     faces : [..] Face = get_faces(polytope, true);
     normals : [..] Face_Normal;
     min_face : s64;

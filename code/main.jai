@@ -886,7 +886,7 @@ Evolve_Result :: enum u32 {
 
 gjk :: (verticesA : [] Vector3, verticesB : [] Vector3, simplex_points : *[..] Vector3) -> bool {
     evolve_result : Evolve_Result = .STILL_EVOLVING;
-    direction := Vector3.{0, 0, 0};
+    direction := Vector3.{1, 0, 0};
     while evolve_result == .STILL_EVOLVING {
         evolve_result = evolve_simplex(simplex_points, verticesA, verticesB, *direction);
     }

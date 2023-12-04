@@ -1,5 +1,4 @@
 *.log
-*.exe
 *.pdb
 .build/
 tmp/

@@ -319,10 +319,10 @@ main :: () {
             camera_pos -= camera_speed * camera_front;
         }
         if input_button_states[#char "A"] & .DOWN {
-            camera_pos -= normalize_or_z_axis(cross(camera_front, camera_up)) * camera_speed;
+            camera_pos -= normalize(cross(camera_front, camera_up), fallback=.{z=1}) * camera_speed;
         }
         if input_button_states[#char "D"] & .DOWN {
-            camera_pos += normalize_or_z_axis(cross(camera_front, camera_up)) * camera_speed;
+            camera_pos += normalize(cross(camera_front, camera_up), fallback=.{z=1}) * camera_speed;
         }
 
         y_offset := mouse_delta_y * sensitivity;
@@ -341,7 +341,7 @@ main :: () {
         direction_x := cos(deg_to_rad(yaw) * cos(deg_to_rad(pitch)));
         direction_y := sin(deg_to_rad(pitch));
         direction_z := sin(deg_to_rad(yaw) * cos(deg_to_rad(pitch)));
-        camera_front = normalize_or_z_axis(xyz(direction_x, direction_y, direction_z));
+        camera_front = normalize(xyz(direction_x, direction_y, direction_z), fallback=.{z=1});
 
         glEnable(GL_DEPTH_TEST);
         //glClearColor(to_rgb(254), to_rgb(251), to_rgb(200), 1.0);
@@ -648,7 +648,7 @@ get_face_normals_and_min_face :: (faces : [..] Face, polytope : [] Vector3) -> [
         b := f.b;
         c := f.c;
 
-        normal := normalize_or_z_axis(cross_product(b - a, c - a));
+        normal := normalize(cross_product(b - a, c - a), fallback=.{z=1});
         centroid := find_centroid(a, b, c);
         distance := dot_product(normal, a);
         if distance < 0 {

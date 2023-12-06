@@ -11,11 +11,6 @@ Simp :: #import "Simp";
 
 WINDOW_WIDTH :: 1920;
 
-triangle_vao : u32;
-triangle_vbo : u32;
-square_vao : u32;
-square_vbo : u32;
-square_ebo : u32;
 cube_vao : u32;
 cube_vbo : u32;
 line_vao : u32;
@@ -27,25 +22,6 @@ tetrahedron_ebo : u32;
 simplex_vao : u32;
 simplex_vbo : u32;
 simplex_ebo : u32;
-
-/*
-triangle_vertices :: float32.[
-    -0.5, 0.5,
-    0.5, 0.0,
-    -0.5, -0.5
-];
-*/
-square_vertices :: float32.[
-    -0.5, -0.5,
-    -0.5, 0.5,
-    0.5, -0.5,
-    0.5, 0.5
-];
-
-square_indices :: u32.[
-    0, 1, 3,
-    0, 2, 3
-];
 
 tetrahedron_vertices :: float32.[
     -0.5,  0.5,  0.5,
@@ -176,29 +152,8 @@ main :: () {
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
     }
-/*
-    glGenVertexArrays(1, *triangle_vao);
-    glGenBuffers(1, *triangle_vbo);
-    glBindVertexArray(triangle_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, triangle_vbo);
-    glBufferData(GL_ARRAY_BUFFER, triangle_vertices.count * size_of(float32), triangle_vertices.data, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * size_of(float), null);
-    glEnableVertexAttribArray(0);
-*/
     // TODO: cleanup all of these repeated gens and binds
-    glGenVertexArrays(1, *square_vao);
-    glGenBuffers(1, *square_ebo);
-    glGenBuffers(1, *square_vbo);
-    glBindVertexArray(square_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, square_vbo);
-    glBufferData(GL_ARRAY_BUFFER, square_vertices.count * size_of(float32), square_vertices.data, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, square_ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, square_indices.count * size_of(u32), square_indices.data, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * size_of(float), null);
-    glEnableVertexAttribArray(0);
-
     glGenVertexArrays(1, *line_vao);
     glGenBuffers(1, *line_vbo);
 
@@ -223,24 +178,16 @@ main :: () {
     glVertexAttribPointer(0, 3, GL_FLOAT, false, 3 * size_of(float), null);
     glEnableVertexAttribArray(0);
 
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, tetrahedron_ebo);
-    //glBufferData(GL_ELEMENT_ARRAY_BUFFER, tetrahedron_indices.count * size_of(u32), tetrahedron_indices.data, GL_STATIC_DRAW);
+    tetrahedron_pos := Vector3.{-2.0, 0.0, 0.0};
+    cube_pos := Vector3.{0.0, 0.0, 0.0};
 
-    //tetrahedron_pos := Vector3.{-7.0, 0.0, 0.0};
-    //cube_pos := Vector3.{0.0, 0.0, 0.0};
-    triangle_pos := Vector3.{-2.0, 0.0, 0.0};
-    square_pos := Vector3.{0.0, 0.0, 0.0};
-    //square_pos := Vector3.{-3.0, 2.0, 0.0};
     camera_pos := xyz(0.0, 0.0, 10.0);
-    //camera_pos := xyz(1.828257, 0.742078, -0.525561);
     camera_front := xyz(0.0, 0.0, -1.0);
-    //camera_front := xyz(-0.979051, -0.201955, -0.025966);
     camera_up := xyz(0.0, 1.0, 0.0);
     delta_time := 0.0;
     last_frame := 0.0;
     pitch := 0.0;
     yaw := -90.0;
-    //yaw := 180.0;
     roll := 0.0;
     fov := 45.0;
     sensitivity := 0.1;
@@ -266,34 +213,34 @@ main :: () {
         delta_time = current_frame - last_frame;
         last_frame = current_frame;
 
-        triangle_pos_increment := 0.01;
+        tetrahedron_pos_increment := 0.01;
         if input_button_states[Key_Code.ARROW_LEFT] & .DOWN {
-            triangle_pos.x -= triangle_pos_increment;
+            tetrahedron_pos.x -= tetrahedron_pos_increment;
         }
         if input_button_states[Key_Code.ARROW_RIGHT] & .DOWN {
-            triangle_pos.x += triangle_pos_increment;
+            tetrahedron_pos.x += tetrahedron_pos_increment;
         }
         if input_button_states[#char "["] & .DOWN {
-            triangle_pos.x -= triangle_pos_increment * triangle_pos_increment;
+            tetrahedron_pos.x -= tetrahedron_pos_increment * tetrahedron_pos_increment;
         }
         if input_button_states[#char "]"] & .DOWN {
-            triangle_pos.x += triangle_pos_increment * triangle_pos_increment;
+            tetrahedron_pos.x += tetrahedron_pos_increment * tetrahedron_pos_increment;
         }
         if input_button_states[Key_Code.ARROW_DOWN] & .DOWN {
-            triangle_pos.y -= triangle_pos_increment;
+            tetrahedron_pos.y -= tetrahedron_pos_increment;
         }
         if input_button_states[Key_Code.ARROW_UP] & .DOWN {
-            triangle_pos.y += triangle_pos_increment;
+            tetrahedron_pos.y += tetrahedron_pos_increment;
         }
-        if triangle_pos.x > 7.0 || triangle_pos.x < -7.0 {
-            triangle_pos.x *= -1.0;
+        if tetrahedron_pos.x > 7.0 || tetrahedron_pos.x < -7.0 {
+            tetrahedron_pos.x *= -1.0;
         }
-        if triangle_pos.y > 7.0 || triangle_pos.y < -7.0 {
-            triangle_pos.y *= -1.0;
+        if tetrahedron_pos.y > 7.0 || tetrahedron_pos.y < -7.0 {
+            tetrahedron_pos.y *= -1.0;
         }
 
-        tetrahedron_world_pos := to_world_pos(tetrahedron_vertices, triangle_pos);
-        cube_world_pos := to_world_pos(cube_vertices, square_pos);
+        tetrahedron_world_pos := to_world_pos(tetrahedron_vertices, tetrahedron_pos);
+        cube_world_pos := to_world_pos(cube_vertices, cube_pos);
         simplex_points : [..] Vector3;
         simplex_points.allocator = temp;
         collision = gjk(tetrahedron_world_pos, cube_world_pos, *simplex_points);
@@ -373,7 +320,7 @@ main :: () {
 
         // tetrahedron
         glBindVertexArray(tetrahedron_vao);
-        m_trans := make_translation_matrix4(triangle_pos);
+        m_trans := make_translation_matrix4(tetrahedron_pos);
         m_scaled := make_scale_matrix4(xyz(scale_factor, scale_factor, scale_factor));
         m_result := m_trans * m_scaled;
         glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
@@ -383,7 +330,7 @@ main :: () {
         // cube
         glBindVertexArray(cube_vao);
         glUniform3f(color_loc, 0.0, 0.0, 1.0);
-        m_trans = make_translation_matrix4(square_pos);
+        m_trans = make_translation_matrix4(cube_pos);
         m_scaled = make_scale_matrix4(xyz(scale_factor, scale_factor, scale_factor));
         m_result = m_trans * m_scaled;
         glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
@@ -408,23 +355,6 @@ main :: () {
             glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
             glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, null);
             //glDrawArrays(GL_TRIANGLES, 0, 12);
-/*
-            // penetration line
-            line_points : [..] Vector3;
-            array_add(*line_points, .{0, 0, 0}, collision_normal);
-            line_vertices : [] float32 = to_vertices(line_points);
-            glBindVertexArray(line_vao);
-            glBindBuffer(GL_ARRAY_BUFFER, line_vbo);
-            glBufferData(GL_ARRAY_BUFFER, line_vertices.count * size_of(float32), line_vertices.data, GL_STATIC_DRAW);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * size_of(float), null);
-            glEnableVertexAttribArray(0);
-
-            glUniform3f(color_loc, 0.0, 1.0, 1.0);
-            m_trans = make_translation_matrix4(.{0.0, 0.0, 0.0});
-            m_result = m_trans;
-            glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-*/
 
             // face normals
             face_normals_with_polytope : [..] Vector3;
@@ -472,8 +402,8 @@ main :: () {
         // center square dot
         glBindVertexArray(cube_vao);
         glUniform3f(color_loc, 0.0, 0.0, 0.0);
-        square_pos2 := Vector3.{0.0, 0.0, 0.0};
-        m_trans = make_translation_matrix4(square_pos2);
+        cube_pos2 := Vector3.{0.0, 0.0, 0.0};
+        m_trans = make_translation_matrix4(cube_pos2);
         scale_factor2 := 0.05;
         m_scaled = make_scale_matrix4(xyz(scale_factor2, scale_factor2, scale_factor2));
         m_result = m_trans * m_scaled;
@@ -481,35 +411,6 @@ main :: () {
         glDrawArrays(GL_TRIANGLES, 0, 36);
         //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null);
 
-/*
-        // triangle
-        glBindVertexArray(triangle_vao);
-        m_trans := make_translation_matrix4(triangle_pos);
-        m_scaled := make_scale_matrix4(xyz(scale_factor, scale_factor, scale_factor));
-        m_result := m_trans * m_scaled;
-        glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-
-        // square
-        glBindVertexArray(square_vao);
-        glUniform3f(color_loc, 0.0, 0.0, 1.0);
-        m_trans = make_translation_matrix4(square_pos);
-        m_scaled = make_scale_matrix4(xyz(scale_factor, scale_factor, scale_factor));
-        m_result = m_trans * m_scaled;
-        glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null);
-
-        // center square dot
-        glBindVertexArray(square_vao);
-        glUniform3f(color_loc, 0.0, 0.0, 0.0);
-        square_pos2 := Vector3.{0.0, 0.0, 0.01};
-        m_trans = make_translation_matrix4(square_pos2);
-        scale_factor2 := 0.05;
-        m_scaled = make_scale_matrix4(xyz(scale_factor2, scale_factor2, scale_factor2));
-        m_result = m_trans * m_scaled;
-        glUniformMatrix4fv(model_loc, 1, GL_TRUE, m_result.floats.data);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null);
-*/
         Simp.swap_buffers(window);
     }
 }
@@ -603,16 +504,7 @@ find_closest_point_on_polyhedron_for_point :: (point : Vector3, faces : [] Face)
 
     return closest_point;
 }
-/*
-Contact :: struct {
-// 1 for each collider
-    points_world : [2] Vector3;
-    points_local : [2] Vector3;
-    normal : Vector3;
-    tangents : [2] Vector3;
-    penetration_depth : float32;
-}
-*/
+
 to_edges :: (arr : [] Vector3) -> [..] Edge {
     edge_pairs : [..] Edge;
     edge_pairs.allocator = temp;
@@ -994,18 +886,6 @@ to_world_pos :: (vertices : [] float32, pos : Vector3) -> [..] Vector3 {
     }
 
     return vertices_vec3;
-}
-
-not_equal_pos :: (arr : [] Vector3, arr2 : [] Vector3) -> bool {
-    if arr.count != arr2.count then return true;
-    for x, index : arr {
-        if x != arr2[index] then return true;
-    }
-    return false;
-}
-
-same_direction :: (direction : Vector3, ao : Vector3) -> bool {
-    return dot_product(direction, ao) > 0;
 }
 
 to_vertices :: (vs : [] Vector3) -> [] float32 {

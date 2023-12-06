@@ -194,10 +194,7 @@ main :: () {
     scale_factor := 1.0;
     collision : bool;
     collision_normal : Vector3;
-    face_normals : [..] Face_Normal;
-    face_normals.allocator = temp;
-    polytope : [..] Vector3;
-    polytope.allocator = temp;
+    face_normals : [] Face_Normal;
 
     running := true;
     while running {
@@ -243,9 +240,9 @@ main :: () {
         cube_world_pos := to_world_pos(cube_vertices, cube_pos);
         simplex_points : [..] Vector3;
         simplex_points.allocator = temp;
+        polytope : [] Vector3;
         collision = gjk(tetrahedron_world_pos, cube_world_pos, *simplex_points);
         if collision {
-            array_reset(*polytope);
             new_context : Context;
             new_context.allocator = temp;
             push_context new_context {
@@ -529,7 +526,7 @@ find_centroid :: (a : Vector3, b : Vector3, c : Vector3) -> Vector3 {
                    };
 }
 
-get_face_normals_and_min_face :: (faces : [..] Face, polytope : [] Vector3) -> [..] Face_Normal, s64 {
+get_face_normals_and_min_face :: (faces : [] Face, polytope : [] Vector3) -> [] Face_Normal, s64 {
     min_face := 0;
     min_distance := FLOAT32_MAX;
     face_normals : [..] Face_Normal;
@@ -562,7 +559,7 @@ get_face_normals_and_min_face :: (faces : [..] Face, polytope : [] Vector3) -> [
     return face_normals, min_face;
 }
 
-epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3) -> [..] Vector3, [..] Face_Normal {
+epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3) -> [] Vector3, [] Face_Normal {
     // Initially we find the closest face to the origin.
     // If the face of point 'v' on the polytope "sees" the support point,
     // we need to remove that edge so that we can add the new support point
@@ -577,7 +574,7 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
     // TODO: We need to clean this up, too many copies of the same points,
     // make one source of "truth" (prob with indices refering to original)
     faces : [..] Face = get_faces(polytope, true);
-    normals : [..] Face_Normal;
+    normals : [] Face_Normal;
     min_face : s64;
     keep_looping := true;
     loop_num := 0;
@@ -585,8 +582,8 @@ epa :: (polytope : [..] Vector3, verticesA : [] Vector3, verticesB : [] Vector3)
     // there is numerical instability. So we keep track of the smallest value of
     // length(projection(support_point, v) - v)
     smallest_length : float32 = FLOAT32_MAX;
-    smallest_length_polytope : [..] Vector3;
-    smallest_length_normals : [..] Face_Normal;
+    smallest_length_polytope : [] Vector3;
+    smallest_length_normals : [] Face_Normal;
     normals, min_face = get_face_normals_and_min_face(faces, polytope);
 
     // To loop through any new polytopes until a point of the polytope is also a point

@@ -21,7 +21,7 @@ It also generates a polytope to determine the penetration depth of the collision
 
 From the images above you can see that when the red tetrahedron collides with the blue cube, the green simplex appears. The gjk algorithmn relies on a support function that generates the points that would lie on the minkowski difference of the two colliding objects. These points make up the green simplex, and if this simplex contains the origin, then that means the two objects are colliding! (The black cube being the origin in this case)
 
-The simplex is then used in the next algorithm, the EPA. The expanded polytope is represented in purple (along with the green simplex as it extends that). The EPA keeps expanding the original simplex until it can no longer find a closer face on the minkowski difference. The closest point from the origin to a point on the EPA is the penetration depth. The yellow are just the normals to help aid in debugging and visualization.
+The simplex is then used in the next algorithm, the EPA. The expanded polytope is represented in purple (and might even include the green simplex as it extends that). The EPA keeps expanding the original simplex until it can no longer find a closer face on the minkowski difference. The closest point from the origin to a point on EPA's face is the penetration depth. The yellow represents the normals of all of the EPA's faces. The next step would be to use the normal of the closest face and nudge one of the objects in that direction by the depth amount.
 
 ## Running the application
 You can run the demo by running the following command at the base of the project:

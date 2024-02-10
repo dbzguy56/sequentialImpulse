@@ -206,7 +206,7 @@ main :: () {
             if it.type == .KEYBOARD && it.key_pressed && it.key_code == .BACKSPACE then running = false;
         }
 
-        current_frame : float32 = xx get_time();
+        current_frame : float32 = xx seconds_since_init();
         delta_time = current_frame - last_frame;
         last_frame = current_frame;
 
